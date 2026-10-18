@@ -108,6 +108,13 @@ install_staged caelestia-shell "$WORK/stage-shell"
 # ---------------------------------------------------------------- cli
 log "Building caelestia-cli $CLI_TAG"
 checkout https://github.com/caelestia-dots/cli.git "$SRC_DIR/cli" "$CLI_TAG"
+# Fix: the recorder inherits the caller's stdout/stderr. When started from the shell's
+# panel, that's a pipe the shell closes once `caelestia record` exits, so the recorder
+# dies of SIGPIPE ~1s in (empty recording, panel resets). Detach it from those pipes.
+sed -i 's|proc = subprocess.Popen(\[RECORDER, \*args, "-o", str(recording_path)\], start_new_session=True)|proc = subprocess.Popen([RECORDER, *args, "-o", str(recording_path)], start_new_session=True, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)|' \
+    "$SRC_DIR/cli/src/caelestia/subcommands/record.py"
+grep -q 'stderr=subprocess.DEVNULL)' "$SRC_DIR/cli/src/caelestia/subcommands/record.py" \
+    || warn "couldn't apply the recorder SIGPIPE fix (record.py changed upstream?)"
 python3 -m build --wheel --no-isolation --outdir "$WORK/dist" "$SRC_DIR/cli"
 
 log "Installing caelestia-cli into $CLI_VENV (venv using the system's pillow/materialyoucolor)"
